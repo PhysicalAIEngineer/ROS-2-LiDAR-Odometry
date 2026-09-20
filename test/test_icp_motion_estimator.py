@@ -43,8 +43,12 @@ def test_icp_recovers_small_translation():
         normal_max_nn=8,
         max_inlier_rmse=0.2,
         relative_fitness=0.1,
+        max_translation=1.0,
     ))
-    result = estimator.estimate(source, target)
+    initial = np.eye(4, dtype=np.float64)
+    initial[:3, 3] = translation
+
+    result = estimator.estimate(source, target, initial)
 
     assert result.accepted
     assert np.isfinite(result.inlier_rmse)
