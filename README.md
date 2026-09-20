@@ -2,8 +2,6 @@
 
 A ROS 2 Python implementation of LiDAR odometry using sequential 3D point-cloud registration with Open3D point-to-plane ICP. The node subscribes to KITTI LiDAR point clouds, downsamples each scan, estimates frame-to-frame motion, accumulates the 4×4 pose transform, and publishes the estimated vehicle odometry for visualization in RViz2.
 
-> **Project scope:** This repository implements LiDAR odometry based on scan matching and pose accumulation. It does not currently implement a pose graph optimizer or loop-closure backend, so it should not be described as full graph-based SLAM.
-
 ## Overview
 
 The project is designed around a simple and inspectable LiDAR odometry pipeline:
