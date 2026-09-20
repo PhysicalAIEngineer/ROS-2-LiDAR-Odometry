@@ -163,8 +163,19 @@ def test_icp_recovers_known_translation(odometry_node):
     target.points = o3d.utility.Vector3dVector(target_points)
 
     # Match the estimator configuration to the small synthetic test geometry.
-    odometry_node.icp_estimator.config.__class__(
-        voxel_size=0.01
+    from simple_lidar_odometry.icp_motion_estimator import ICPConfig, ICPMotionEstimator
+    odometry_node.icp_estimator = ICPMotionEstimator(
+        ICPConfig(
+            voxel_size=0.01,
+            correspondence_distance=0.25,
+            normal_radius=2.0,
+            normal_max_nn=12,
+            max_iteration=100,
+            relative_fitness=0.1,
+            max_inlier_rmse=0.2,
+            max_translation=1.0,
+            max_rotation_deg=45.0,
+        )
     )
 
     initial = np.eye(4, dtype=np.float64)
