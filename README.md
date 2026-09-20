@@ -607,14 +607,15 @@ This repository demonstrates practical understanding of:
 - RViz2-based robotics visualization.
 - Python robotics tooling with Open3D, NumPy, and SciPy.
 
-The implementation is particularly useful as a foundation for extending toward more advanced systems such as scan-to-map LiDAR odometry, LiDAR-inertial odometry, loop closure, or pose-graph SLAM.
+## Resume Points 
+# ROS 2 LiDAR Odometry | Python, ROS 2 Humble, Open3D, NumPy, SciPy, ICP, KITTI**
 
-## License
+* Developed a **ROS 2 LiDAR odometry pipeline** processing KITTI `PointCloud2` streams, converting 3D sensor data into Open3D point clouds and performing real-time frame-to-frame motion estimation.
 
-This project is released under the MIT License.
+* Implemented **voxel-grid point-cloud downsampling and point-to-plane ICP registration** to estimate relative 6-DoF motion between consecutive LiDAR scans while reducing computational overhead.
 
-## Author
+* Designed **4×4 homogeneous transformation and pose accumulation** using SE(3) rigid-body transformations, with rotation conversion between rotation matrices, Euler angles, and quaternions for ROS-compatible state estimation.
 
-**PhysicalAIEngineer**
+* Integrated LiDAR motion estimation with **ROS 2 `nav_msgs/Odometry`, RViz2 visualization, launch files, topic remapping, and QoS configuration**, enabling end-to-end visualization and debugging of the perception pipeline.
 
-GitHub: https://github.com/PhysicalAIEngineer
+* Built and validated reusable **3D perception/registration utilities and unit tests** covering point-cloud conversion, voxel filtering, ICP translation estimation, transformation mathematics, quaternion conversion, and statistical outlier removal.
