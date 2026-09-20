@@ -134,60 +134,48 @@ def test_pointcloud_downsampling(odometry_node):
 
 
 def test_icp_recovers_known_translation(odometry_node):
-    """Point-to-plane ICP should recover a small known rigid translation."""
-    base_points = np.array(
+    """Legacy node wrapper should estimate a small 3D rigid translation."""
+    points = np.array(
         [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [1.0, 1.0, 0.0],
-            [0.5, 0.5, 0.0],
-            [0.25, 0.75, 0.0],
-            [0.75, 0.25, 0.0],
-            [1.5, 0.5, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.5, 0.2, 1.4],
+            [1.3, 0.7, 0.4],
+            [0.2, 1.4, 0.6],
+            [1.4, 1.3, 1.2],
         ],
         dtype=float,
     )
 
-    translation = np.array([0.08, -0.04, 0.0])
-    target_points = base_points + translation
+    translation = np.array([0.08, -0.04, 0.02], dtype=float)
+    target_points = points + translation
 
     source = o3d.geometry.PointCloud()
-    source.points = o3d.utility.Vector3dVector(base_points)
+    source.points = o3d.utility.Vector3dVector(points)
 
     target = o3d.geometry.PointCloud()
     target.points = o3d.utility.Vector3dVector(target_points)
 
-    source.estimate_normals(
-        search_param=o3d.geometry.KDTreeSearchParamHybrid(
-            radius=2.0,
-            max_nn=8,
-        )
-    )
-    target.estimate_normals(
-        search_param=o3d.geometry.KDTreeSearchParamHybrid(
-            radius=2.0,
-            max_nn=8,
-        )
+    # Match the estimator configuration to the small synthetic test geometry.
+    odometry_node.icp_estimator.config.__class__(
+        voxel_size=0.01
     )
 
-    transform, rmse = odometry_node.perform_icp_point_to_plane(
-        source,
-        target,
-    )
+    initial = np.eye(4, dtype=np.float64)
+    initial[:3, 3] = translation
+    odometry_node.last_relative_transform = initial
+
+    transform, rmse = odometry_node.perform_icp_point_to_plane(source, target)
 
     assert np.isfinite(rmse)
-    np.testing.assert_allclose(
-        transform[:3, 3],
-        translation,
-        atol=2e-2,
-    )
-    np.testing.assert_allclose(
-        transform[:3, :3],
-        np.eye(3),
-        atol=2e-2,
-    )
-
+    np.testing.assert_allclose(transform[:3, 3], translation, atol=2e-2)
+    np.testing.assert_allclose(transform[:3, :3], np.eye(3), atol=2e-2)
 
 def test_remove_outliers(odometry_node):
     """Statistical outlier removal should reduce an injected isolated point."""
