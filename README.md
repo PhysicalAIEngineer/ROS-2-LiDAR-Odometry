@@ -6,39 +6,6 @@ The system consumes LiDAR scans through ROS 2 `sensor_msgs/msg/PointCloud2`, val
 
 The repository also includes configurable ICP parameters, ROS 2 launch configuration, RViz2 visualization, reusable registration utilities, unit tests, and a GitHub Actions CI pipeline.
 
----
-
-## Table of Contents
-
-* [Overview](#overview)
-* [System Architecture](#system-architecture)
-* [Pipeline](#pipeline)
-* [Key Features](#key-features)
-* [Technology Stack](#technology-stack)
-* [Repository Structure](#repository-structure)
-* [ICP Motion Estimation](#icp-motion-estimation)
-* [SE(3) Pose Estimation](#se3-pose-estimation)
-* [ROS 2 Node](#ros-2-node)
-* [ROS 2 Topics](#ros-2-topics)
-* [Configuration](#configuration)
-* [Installation](#installation)
-* [Build](#build)
-* [Launch](#launch)
-* [ROS 2 Bag Playback](#ros-2-bag-playback)
-* [RViz2 Visualization](#rviz2-visualization)
-* [Testing](#testing)
-* [Continuous Integration](#continuous-integration)
-* [Useful ROS 2 Commands](#useful-ros-2-commands)
-* [Troubleshooting](#troubleshooting)
-* [Performance Considerations](#performance-considerations)
-* [Current Limitations](#current-limitations)
-* [Future Extensions](#future-extensions)
-* [Development Workflow](#development-workflow)
-* [Research and Portfolio Value](#research-and-portfolio-value)
-* [Resume Description](#resume-description)
-* [License](#license)
-
----
 
 # ROS2 Odometry Pipeline [From LiDAR PointsCloud2 to Robot Pose Using Point-to-Plane ICP]
 <img width="1024" height="1536" alt="9400f2e2-4514-4822-80fb-4f27c3c64e05" src="https://github.com/user-attachments/assets/bf02eeb2-f1ed-4c1b-9d46-5109df062a0a" />
