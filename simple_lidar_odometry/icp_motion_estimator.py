@@ -1,8 +1,4 @@
-"""Production-oriented LiDAR ICP motion estimation utilities.
-
-This module contains the registration logic independently from ROS 2 so it
-can be unit-tested and reused by other localization components.
-"""
+"""Production-oriented LiDAR ICP motion estimation utilities."""
 
 from __future__ import annotations
 
@@ -28,17 +24,15 @@ class ICPConfig:
     max_rotation_deg: float = 45.0
 
     def validate(self) -> None:
-        """Validate configuration values early."""
-        positive = {
+        values = {
             "voxel_size": self.voxel_size,
             "correspondence_distance": self.correspondence_distance,
             "normal_radius": self.normal_radius,
             "max_iteration": self.max_iteration,
         }
-        for name, value in positive.items():
+        for name, value in values.items():
             if value <= 0:
                 raise ValueError(f"{name} must be > 0")
-
         if self.normal_max_nn < 3:
             raise ValueError("normal_max_nn must be >= 3")
         if not 0.0 <= self.relative_fitness <= 1.0:
@@ -71,13 +65,15 @@ class ICPMotionEstimator:
 
     @staticmethod
     def numpy_to_open3d(points: np.ndarray) -> o3d.geometry.PointCloud:
-        """Convert an Nx3 NumPy array into an Open3D point cloud safely."""
+        """Convert an Nx3 NumPy array to an Open3D point cloud."""
         points = np.asarray(points, dtype=np.float64)
         if points.ndim != 2 or points.shape[1] != 3:
             raise ValueError("points must have shape (N, 3)")
+
         points = points[np.all(np.isfinite(points), axis=1)]
         if points.shape[0] < 3:
             raise ValueError("at least 3 finite points are required")
+
         cloud = o3d.geometry.PointCloud()
         cloud.points = o3d.utility.Vector3dVector(points)
         return cloud
@@ -85,18 +81,16 @@ class ICPMotionEstimator:
     def preprocess(
         self,
         cloud: o3d.geometry.PointCloud,
+    ) -> o3d.geometry.PointCloud:
         """Voxel-downsample and validate a point cloud."""
         if not isinstance(cloud, o3d.geometry.PointCloud):
             raise TypeError("cloud must be an Open3D PointCloud")
-
         if len(cloud.points) < 3:
             raise ValueError("point cloud must contain at least 3 points")
 
         filtered = cloud.voxel_down_sample(self.config.voxel_size)
-
         if len(filtered.points) < 3:
             raise ValueError("voxel downsampling left fewer than 3 points")
-
         return filtered
 
     def _estimate_normals(self, cloud: o3d.geometry.PointCloud) -> None:
@@ -114,35 +108,25 @@ class ICPMotionEstimator:
 
     @staticmethod
     def _is_valid_transform(transform: np.ndarray) -> bool:
-        """Check that a transform is numerically and geometrically valid."""
-        if transform.shape != (4, 4):
-            return False
-        if not np.all(np.isfinite(transform)):
+        """Validate an SE(3)-like homogeneous transform."""
+        if transform.shape != (4, 4) or not np.all(np.isfinite(transform)):
             return False
 
         rotation = transform[:3, :3]
-        translation = transform[:3, 3]
-
-        should_be_identity = rotation.T @ rotation
-        determinant = np.linalg.det(rotation)
-
         return (
-            np.allclose(should_be_identity, np.eye(3), atol=1e-3)
-            and math.isclose(float(determinant), 1.0, abs_tol=1e-3)
-            and np.all(np.isfinite(translation))
+            np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-3)
+            and math.isclose(float(np.linalg.det(rotation)), 1.0, abs_tol=1e-3)
+            and np.allclose(transform[3], [0.0, 0.0, 0.0, 1.0], atol=1e-6)
         )
 
     @staticmethod
     def _motion_magnitude(transform: np.ndarray) -> tuple[float, float]:
         """Return translation magnitude and rotation angle in degrees."""
         translation = float(np.linalg.norm(transform[:3, 3]))
-
-        rotation = transform[:3, :3]
-        trace = float(np.trace(rotation))
+        trace = float(np.trace(transform[:3, :3]))
         cosine = np.clip((trace - 1.0) / 2.0, -1.0, 1.0)
-        angle_rad = math.acos(float(cosine))
-
-        return translation, math.degrees(angle_rad)
+        angle_deg = math.degrees(math.acos(float(cosine)))
+        return translation, angle_deg
 
     def estimate(
         self,
@@ -159,11 +143,11 @@ class ICPMotionEstimator:
 
         if initial_transform is None:
             initial_transform = np.eye(4, dtype=np.float64)
-
-        initial_transform = np.asarray(initial_transform, dtype=np.float64)
+        else:
+            initial_transform = np.asarray(initial_transform, dtype=np.float64)
 
         if not self._is_valid_transform(initial_transform):
-            raise ValueError("initial_transform must be a valid 4x4 SE(3) transform")
+            raise ValueError("initial_transform must be a valid 4x4 transform")
 
         criteria = o3d.pipelines.registration.ICPConvergenceCriteria(
             relative_fitness=1e-6,
@@ -186,11 +170,11 @@ class ICPMotionEstimator:
 
         if not self._is_valid_transform(transform):
             return ICPResult(
-                transformation=initial_transform.copy(),
-                fitness=fitness,
-                inlier_rmse=inlier_rmse,
-                accepted=False,
-                reason="invalid transformation",
+                initial_transform.copy(),
+                fitness,
+                inlier_rmse,
+                False,
+                "invalid transformation",
             )
 
         translation, rotation_deg = self._motion_magnitude(transform)
@@ -216,9 +200,9 @@ class ICPMotionEstimator:
             reason = "rotation gate exceeded"
 
         return ICPResult(
-            transformation=transform if accepted else initial_transform.copy(),
-            fitness=fitness,
-            inlier_rmse=inlier_rmse,
-            accepted=accepted,
-            reason=reason,
+            transform if accepted else initial_transform.copy(),
+            fitness,
+            inlier_rmse,
+            accepted,
+            reason,
         )
