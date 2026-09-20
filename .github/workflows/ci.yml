@@ -18,7 +18,8 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y             python3-pip             python3-pytest             python3-pytest-cov             python3-numpy             python3-scipy             python3-yaml             python3-colcon-common-extensions
+          DEBIAN_FRONTEND=noninteractive apt-get install -y             python3-pip             python3-pytest             python3-pytest-cov             python3-numpy             python3-scipy             python3-yaml             python3-colcon-common-extensions \
+            libgl1
 
       - name: Install Python dependencies
         run: |
