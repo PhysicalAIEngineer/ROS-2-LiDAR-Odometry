@@ -1,0 +1,14 @@
+# ROS2 LIDAR Odometry
+numpy==1.26.4
+open3d==0.18.0
+scipy==1.11.4
+PyYAML==6.0.1
+matplotlib==3.8.2
+pandas==2.1.4
+
+# testing
+pytest==7.4.4
+pytest-cov==4.1.0
+
+# utilities
+tqdm==4.66.1

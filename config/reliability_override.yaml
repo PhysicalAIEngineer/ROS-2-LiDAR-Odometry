@@ -1,0 +1,7 @@
+# reliability_override.yaml
+/tf_static:
+  durability: transient_local
+  history: keep_all
+/scan:
+  reliability: reliable
+  history: keep_all
