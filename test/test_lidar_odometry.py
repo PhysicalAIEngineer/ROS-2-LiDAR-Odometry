@@ -35,7 +35,16 @@ def odometry_node(monkeypatch):
     import rclpy
 
     monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: DummyNode())
-    return LidarOdometry()
+
+    if not rclpy.ok():
+        rclpy.init(args=[])
+
+    node = LidarOdometry()
+
+    yield node
+
+    if rclpy.ok():
+        rclpy.shutdown()
 
 
 def test_initial_odometry_is_identity(odometry_node):
