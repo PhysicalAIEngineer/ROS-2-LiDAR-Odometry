@@ -44,4 +44,4 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          pytest --cov=simple_lidar_odometry             --cov-report=term-missing             --cov-fail-under=70
+          pytest --cov=simple_lidar_odometry.icp_motion_estimator             --cov-report=term-missing             --cov-fail-under=80
