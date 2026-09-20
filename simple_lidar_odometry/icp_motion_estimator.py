@@ -69,10 +69,22 @@ class ICPMotionEstimator:
         self.config = config or ICPConfig()
         self.config.validate()
 
+    @staticmethod
+    def numpy_to_open3d(points: np.ndarray) -> o3d.geometry.PointCloud:
+        """Convert an Nx3 NumPy array into an Open3D point cloud safely."""
+        points = np.asarray(points, dtype=np.float64)
+        if points.ndim != 2 or points.shape[1] != 3:
+            raise ValueError("points must have shape (N, 3)")
+        points = points[np.all(np.isfinite(points), axis=1)]
+        if points.shape[0] < 3:
+            raise ValueError("at least 3 finite points are required")
+        cloud = o3d.geometry.PointCloud()
+        cloud.points = o3d.utility.Vector3dVector(points)
+        return cloud
+
     def preprocess(
         self,
         cloud: o3d.geometry.PointCloud,
-    ) -> o3d.geometry.PointCloud:
         """Voxel-downsample and validate a point cloud."""
         if not isinstance(cloud, o3d.geometry.PointCloud):
             raise TypeError("cloud must be an Open3D PointCloud")
