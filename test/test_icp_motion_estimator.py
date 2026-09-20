@@ -8,12 +8,11 @@ from simple_lidar_odometry.icp_motion_estimator import ICPConfig, ICPMotionEstim
 def make_cloud() -> o3d.geometry.PointCloud:
     points = np.array([
         [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
-        [1.0, 1.0, 0.0], [0.5, 0.5, 0.0], [0.25, 0.75, 0.0],
-        [0.75, 0.25, 0.0], [1.5, 0.5, 0.0], [0.5, 1.5, 0.0],
+        [1.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 1.0],
+        [0.0, 1.0, 1.0], [1.0, 1.0, 1.0], [0.5, 0.2, 1.4],
+        [1.3, 0.7, 0.4], [0.2, 1.4, 0.6], [1.4, 1.3, 1.2],
     ], dtype=np.float64)
-    cloud = o3d.geometry.PointCloud()
-    cloud.points = o3d.utility.Vector3dVector(points)
-    return cloud
+    return ICPMotionEstimator.numpy_to_open3d(points)
 
 
 def test_config_rejects_invalid_values():
