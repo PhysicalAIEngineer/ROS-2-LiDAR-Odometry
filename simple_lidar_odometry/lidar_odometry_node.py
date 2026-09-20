@@ -111,6 +111,19 @@ class LidarOdometry(Node):
         self.last_relative_transform = result.transformation
         return result.transformation, result.inlier_rmse
 
+    def remove_outliers(self, point_cloud):
+        """Backward-compatible statistical outlier filtering helper."""
+        if not isinstance(point_cloud, o3d.geometry.PointCloud):
+            raise TypeError("point_cloud must be an Open3D PointCloud")
+        if len(point_cloud.points) == 0:
+            raise ValueError("point_cloud must not be empty")
+
+        filtered, _ = point_cloud.remove_statistical_outlier(
+            nb_neighbors=20,
+            std_ratio=2.0,
+        )
+        return filtered
+
     def pointcloud2_to_pointcloud(self, msg: PointCloud2):
         """Convert ROS 2 PointCloud2 to a downsampled Open3D cloud."""
         data = read_points(msg, skip_nans=True, field_names=("y", "x", "z"))
