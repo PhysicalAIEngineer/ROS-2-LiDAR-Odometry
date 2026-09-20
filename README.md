@@ -36,6 +36,10 @@ KITTI / ROS 2 PointCloud2
                RViz2
 ```
 
+## ROS2 LiDAR Odometry Pipeline (KITTI) 
+<img width="1536" height="1024" alt="006ae757-e70e-4b1f-b679-7dfd2937f8be" src="https://github.com/user-attachments/assets/e04de0c3-ed8b-4de2-a017-26d4452ca3a3" />
+
+
 ## Features
 
 - ROS 2 Python node for LiDAR odometry.
