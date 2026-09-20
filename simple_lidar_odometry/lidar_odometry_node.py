@@ -101,6 +101,16 @@ class LidarOdometry(Node):
         except (ValueError, RuntimeError, TypeError) as exc:
             self.get_logger().error(f"LiDAR frame rejected: {exc}")
 
+    def perform_icp_point_to_plane(self, source, target):
+        """Backward-compatible wrapper for the legacy ICP API."""
+        result = self.icp_estimator.estimate(
+            source,
+            target,
+            self.last_relative_transform,
+        )
+        self.last_relative_transform = result.transformation
+        return result.transformation, result.inlier_rmse
+
     def pointcloud2_to_pointcloud(self, msg: PointCloud2):
         """Convert ROS 2 PointCloud2 to a downsampled Open3D cloud."""
         data = read_points(msg, skip_nans=True, field_names=("y", "x", "z"))
