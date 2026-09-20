@@ -105,7 +105,7 @@ class LidarOdometry(Node):
         """Convert ROS 2 PointCloud2 to a downsampled Open3D cloud."""
         data = read_points(msg, skip_nans=True, field_names=("y", "x", "z"))
         cloud = self.icp_estimator.numpy_to_open3d(data)
-        return self.icp_estimator.preprocess(cloud)
+        return cloud
 
     def publish_odometry(self, translation: np.ndarray, rotation: np.ndarray) -> None:
         """Publish accumulated pose as nav_msgs/Odometry."""
