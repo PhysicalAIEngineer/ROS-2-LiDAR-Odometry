@@ -608,8 +608,6 @@ This repository demonstrates practical understanding of:
 - Python robotics tooling with Open3D, NumPy, and SciPy.
 
 ## Resume Points 
-# ROS 2 LiDAR Odometry | Python, ROS 2 Humble, Open3D, NumPy, SciPy, ICP, KITTI**
-
 * Developed a **ROS 2 LiDAR odometry pipeline** processing KITTI `PointCloud2` streams, converting 3D sensor data into Open3D point clouds and performing real-time frame-to-frame motion estimation.
 
 * Implemented **voxel-grid point-cloud downsampling and point-to-plane ICP registration** to estimate relative 6-DoF motion between consecutive LiDAR scans while reducing computational overhead.
