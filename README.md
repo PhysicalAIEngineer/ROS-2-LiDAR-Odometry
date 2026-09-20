@@ -588,6 +588,10 @@ Unit tests are maintained in:
 test/test_lidar_odometry.py
 ```
 
+## Output 
+<img width="381" height="332" alt="lidar-odom-ezgif com-optimize" src="https://github.com/user-attachments/assets/637b2a13-e6a0-4804-8f1a-534ceb54429a" />
+
+
 ## Research / Portfolio Context
 
 This repository demonstrates practical understanding of:
