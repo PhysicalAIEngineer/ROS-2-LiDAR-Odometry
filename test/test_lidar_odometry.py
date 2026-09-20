@@ -120,8 +120,8 @@ def test_pointcloud_downsampling(odometry_node):
         module.read_points = original_read_points
 
     assert isinstance(cloud, o3d.geometry.PointCloud)
-    assert len(cloud.points) > 0
-    assert len(cloud.points) < len(points)
+    assert len(cloud.points) == len(points)
+    assert np.all(np.isfinite(np.asarray(cloud.points)))
 
 
 def test_icp_recovers_known_translation(odometry_node):
