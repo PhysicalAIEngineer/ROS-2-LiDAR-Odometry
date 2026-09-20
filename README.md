@@ -1,171 +1,347 @@
 # ROS 2 LiDAR Odometry
 
-A ROS 2 Python implementation of LiDAR odometry using sequential 3D point-cloud registration with Open3D point-to-plane ICP. The node subscribes to KITTI LiDAR point clouds, downsamples each scan, estimates frame-to-frame motion, accumulates the 4×4 pose transform, and publishes the estimated vehicle odometry for visualization in RViz2.
+A production-oriented **ROS 2 LiDAR odometry and 3D motion-estimation pipeline** built around sequential point-cloud registration and **point-to-plane ICP** using Open3D.
 
-## Overview
+The system consumes LiDAR scans through ROS 2 `sensor_msgs/msg/PointCloud2`, validates and converts the data into Open3D point clouds, performs voxel-based preprocessing, estimates surface normals, registers consecutive scans using ICP, validates the estimated rigid-body transformation, accumulates vehicle pose, and publishes the resulting trajectory as `nav_msgs/msg/Odometry`.
 
-The project is designed around a simple and inspectable LiDAR odometry pipeline:
+The repository also includes configurable ICP parameters, ROS 2 launch configuration, RViz2 visualization, reusable registration utilities, unit tests, and a GitHub Actions CI pipeline.
 
-```
-KITTI / ROS 2 PointCloud2
-          │
-          ▼
-  PointCloud2 Conversion
-          │
-          ▼
-    Voxel Downsampling
-          │
-          ▼
- Previous Scan ───────── Current Scan
-          │                    │
-          └──────► ICP ◄───────┘
-                  │
-                  ▼
-        Relative 4×4 Transform
-                  │
-                  ▼
-        Pose / Odometry Accumulation
-                  │
-                  ▼
-        nav_msgs/Odometry
-                  │
-                  ▼
-          /pointcloud/odom
-                  │
-                  ▼
-               RViz2
-```
+---
 
-## ROS2 LiDAR Odometry Pipeline (KITTI) 
-<img width="1536" height="1024" alt="006ae757-e70e-4b1f-b679-7dfd2937f8be" src="https://github.com/user-attachments/assets/e04de0c3-ed8b-4de2-a017-26d4452ca3a3" />
+## Table of Contents
+
+* [Overview](#overview)
+* [System Architecture](#system-architecture)
+* [Pipeline](#pipeline)
+* [Key Features](#key-features)
+* [Technology Stack](#technology-stack)
+* [Repository Structure](#repository-structure)
+* [ICP Motion Estimation](#icp-motion-estimation)
+* [SE(3) Pose Estimation](#se3-pose-estimation)
+* [ROS 2 Node](#ros-2-node)
+* [ROS 2 Topics](#ros-2-topics)
+* [Configuration](#configuration)
+* [Installation](#installation)
+* [Build](#build)
+* [Launch](#launch)
+* [ROS 2 Bag Playback](#ros-2-bag-playback)
+* [RViz2 Visualization](#rviz2-visualization)
+* [Testing](#testing)
+* [Continuous Integration](#continuous-integration)
+* [Useful ROS 2 Commands](#useful-ros-2-commands)
+* [Troubleshooting](#troubleshooting)
+* [Performance Considerations](#performance-considerations)
+* [Current Limitations](#current-limitations)
+* [Future Extensions](#future-extensions)
+* [Development Workflow](#development-workflow)
+* [Research and Portfolio Value](#research-and-portfolio-value)
+* [Resume Description](#resume-description)
+* [License](#license)
+
+---
+
+# ROS2 Odometry Pipeline [From LiDAR PointsCloud2 to Robot Pose Using Point-to-Plane ICP]
+<img width="1024" height="1536" alt="9400f2e2-4514-4822-80fb-4f27c3c64e05" src="https://github.com/user-attachments/assets/bf02eeb2-f1ed-4c1b-9d46-5109df062a0a" />
 
 
-## Features
 
-- ROS 2 Python node for LiDAR odometry.
-- PointCloud2 input processing.
-- Open3D point-cloud representation.
-- Voxel-grid downsampling before registration.
-- Point-to-plane ICP for consecutive scans.
-- 4×4 homogeneous transformation matrices for motion estimation.
-- Sequential pose accumulation.
-- Euler-angle and quaternion conversion utilities.
-- `nav_msgs/Odometry` output.
-- RViz2 configuration for point-cloud and odometry visualization.
-- ROS 2 QoS override configuration.
-- Unit tests for transformations, point-cloud processing, ICP, and outlier filtering.
+---
 
-## Technology Stack
+# System Architecture
 
-| Component | Version / Technology |
-|---|---|
-| OS target | Ubuntu 22.04 |
-| ROS 2 | Humble |
-| Python | 3.10 |
-| Point-cloud processing | Open3D 0.18.0 |
-| Numerical computing | NumPy 1.26.4 |
-| Scientific computing | SciPy 1.11.4 |
-| Visualization | RViz2 |
-| Middleware | ROS 2 / DDS |
-| Dataset/input | KITTI-style LiDAR PointCloud2 stream |
+The repository separates the ROS-facing layer from the point-cloud registration layer.
+<img width="1024" height="1536" alt="4273abb7-8e9d-4b04-8b94-39539fff84ab" src="https://github.com/user-attachments/assets/bf8f1825-1476-4218-875f-30a7d09b0be0" />
 
-The exact runtime environment can vary by ROS 2 installation. Python package versions are pinned in `requirements.txt`.
+---
 
-## Repository Structure
+# Pipeline
 
-```
-ROS-2-LiDAR-Odometry/
-│
-├── README.md
-├── requirements.txt
-├── package.xml
-├── setup.py
-├── setup.cfg
-│
-├── resource/
-│   └── simple_lidar_odometry
-│
-├── simple_lidar_odometry/
-│   ├── __init__.py
-│   ├── conversions.py
-│   └── lidar_odometry_node.py
-│
-├── launch/
-│   ├── lidar_odometry.launch.py
-│   └── lidar_odomety.launch.py
-│
-├── config/
-│   └── reliability_override.yaml
-│
-├── rviz/
-│   └── lidar.rviz
-│
-└── test/
-    └── test_lidar_odometry.py
-```
+## 1. LiDAR Input
 
-The repository also contains IDE metadata under `.idea/`.
-
-## Core Implementation
-
-### 1. ROS 2 LiDAR input
-
-The odometry node subscribes to:
+The node subscribes to:
 
 ```text
 /kitti/point_cloud
 ```
 
-using `sensor_msgs/msg/PointCloud2`.
-
-The callback converts the ROS 2 message into an Open3D point cloud.
-
-### 2. Point-cloud conversion
-
-The conversion layer reads the point fields:
+with:
 
 ```text
-y, x, z
+sensor_msgs/msg/PointCloud2
 ```
 
-and constructs an Open3D `PointCloud`.
+The incoming ROS 2 point-cloud message is converted into a NumPy/Open3D representation.
 
-A voxel grid is then applied with:
+---
+
+## 2. Point Cloud Validation
+
+The point-cloud conversion layer verifies that:
+
+* Input data has the expected 3D structure.
+* Points contain finite values.
+* At least three valid points remain.
+
+Invalid points containing `NaN` or `Inf` are removed before registration.
+
+---
+
+## 3. Voxel Downsampling
+
+Voxel-grid downsampling reduces point density:
 
 ```python
-voxel_size = 1
+cloud.voxel_down_sample(voxel_size)
 ```
 
-to reduce point density before ICP registration.
-
-### 3. Consecutive-frame registration
-
-For every new scan after the first scan, the project registers:
+The default configuration is:
 
 ```text
-previous point cloud → current point cloud
+voxel_size = 1.0
 ```
 
-using Open3D point-to-plane ICP.
+The purpose is to reduce:
 
-Surface normals are estimated before registration. The implementation uses an ICP correspondence threshold of `1.0`.
+* computational cost
+* memory usage
+* redundant points
 
-### 4. Relative transform
+while retaining the overall geometric structure required for registration.
 
-ICP returns a homogeneous transformation:
+---
+
+## 4. Surface Normal Estimation
+
+Point-to-plane ICP requires target surface normals.
+
+The implementation estimates normals using:
 
 ```text
-T_relative ∈ R^(4×4)
+KDTreeSearchParamHybrid
 ```
 
-which represents the estimated motion between two consecutive LiDAR frames.
-
-### 5. Pose accumulation
-
-The current accumulated pose is updated by matrix multiplication:
+with configurable:
 
 ```text
-T_pose ← T_pose · T_relative
+normal_radius
+normal_max_nn
+```
+
+Default values:
+
+```text
+normal_radius = 1.0
+normal_max_nn = 30
+```
+
+---
+
+## 5. Point-to-Plane ICP
+
+Consecutive point clouds are registered using Open3D point-to-plane ICP.
+
+The estimator solves for a rigid transformation:
+
+```text
+T_relative ∈ SE(3)
+```
+
+represented as:
+
+```text
+┌ R  t ┐
+└ 0  1 ┘
+```
+
+where:
+
+```text
+R ∈ SO(3)
+t ∈ R³
+```
+
+The default correspondence distance is:
+
+```text
+1.0 meter
+```
+
+---
+
+# ICP Motion Estimation
+
+The central registration module is:
+
+```text
+simple_lidar_odometry/icp_motion_estimator.py
+```
+
+It exposes:
+
+```python
+ICPMotionEstimator
+```
+
+and:
+
+```python
+ICPConfig
+ICPResult
+```
+
+---
+
+## ICPConfig
+
+Registration parameters are represented by a typed configuration object.
+
+Example:
+
+```python
+ICPConfig(
+    voxel_size=1.0,
+    correspondence_distance=1.0,
+    normal_radius=1.0,
+    normal_max_nn=30,
+    max_iteration=50,
+    relative_fitness=0.15,
+    max_inlier_rmse=0.50,
+    max_translation=5.0,
+    max_rotation_deg=45.0,
+)
+```
+
+This avoids scattering hard-coded thresholds throughout the codebase.
+
+---
+
+## ICPResult
+
+Each registration produces a structured result containing:
+
+```text
+transformation
+fitness
+inlier_rmse
+accepted
+reason
+```
+
+Example:
+
+```python
+ICPResult(
+    transformation=T_relative,
+    fitness=0.84,
+    inlier_rmse=0.17,
+    accepted=True,
+    reason="accepted",
+)
+```
+
+---
+
+# Registration Quality Gating
+
+A production robotics system should not blindly integrate every ICP result.
+
+This project therefore performs several validation checks.
+
+## Transformation validation
+
+The estimated transformation must:
+
+* be a `4 × 4` matrix
+* contain finite values
+* have an orthonormal rotation matrix
+* have determinant approximately equal to `1`
+* contain a valid homogeneous bottom row
+
+Conceptually:
+
+```text
+RᵀR ≈ I
+det(R) ≈ 1
+T[3] ≈ [0, 0, 0, 1]
+```
+
+---
+
+## Fitness gate
+
+ICP fitness must satisfy:
+
+```text
+fitness >= relative_fitness
+```
+
+Default:
+
+```text
+relative_fitness = 0.15
+```
+
+Low fitness indicates insufficient geometric correspondence.
+
+---
+
+## RMSE gate
+
+The inlier RMSE must satisfy:
+
+```text
+inlier_rmse <= max_inlier_rmse
+```
+
+Default:
+
+```text
+max_inlier_rmse = 0.50
+```
+
+---
+
+## Translation gate
+
+The magnitude of estimated translation is checked:
+
+```text
+||t|| <= max_translation
+```
+
+Default:
+
+```text
+max_translation = 5.0 m
+```
+
+---
+
+## Rotation gate
+
+The relative rotation angle is checked:
+
+```text
+θ <= max_rotation_deg
+```
+
+Default:
+
+```text
+max_rotation_deg = 45°
+```
+
+These gates prevent obviously bad registrations from corrupting the accumulated trajectory.
+
+---
+
+# SE(3) Pose Estimation
+
+The accumulated vehicle pose is represented by a homogeneous transformation matrix:
+
+```text
+┌ R₃×₃  t₃×₁ ┐
+└ 0 0 0   1  ┘
 ```
 
 The initial pose is:
@@ -174,76 +350,261 @@ The initial pose is:
 I₄
 ```
 
-the 4×4 identity matrix.
+For each accepted ICP result:
 
-### 6. Odometry output
+```text
+T_pose(k) = T_pose(k-1) · T_relative(k)
+```
 
-The accumulated translation and rotation are converted into a ROS 2 `nav_msgs/Odometry` message.
+This produces the accumulated LiDAR trajectory.
 
-The published topic is:
+---
+
+# Rotation Representation
+
+The project supports conversion between:
+
+```text
+Rotation Matrix
+      ↓
+Euler XYZ
+```
+
+and:
+
+```text
+Rotation Matrix
+      ↓
+Quaternion [x, y, z, w]
+```
+
+SciPy is used for these conversions.
+
+Euler angles are useful for diagnostics and logging.
+
+Quaternions are used for ROS odometry orientation fields.
+
+---
+
+# ROS 2 Node
+
+The ROS-facing implementation is:
+
+```text
+simple_lidar_odometry/lidar_odometry_node.py
+```
+
+The class:
+
+```python
+LidarOdometry
+```
+
+inherits from:
+
+```python
+rclpy.node.Node
+```
+
+It handles:
+
+* ROS parameters
+* PointCloud2 subscription
+* point-cloud conversion
+* ICP invocation
+* pose accumulation
+* odometry publication
+* diagnostics
+* error handling
+
+---
+
+# ROS 2 Topics
+
+## Input
+
+```text
+/kitti/point_cloud
+```
+
+Message:
+
+```text
+sensor_msgs/msg/PointCloud2
+```
+
+Purpose:
+
+```text
+Sequential LiDAR scans
+```
+
+---
+
+## Output
 
 ```text
 /pointcloud/odom
 ```
 
-with:
+Message:
+
+```text
+nav_msgs/msg/Odometry
+```
+
+Purpose:
+
+```text
+Accumulated LiDAR odometry
+```
+
+The odometry message uses:
 
 ```text
 frame_id = odom
+child_frame_id = base_link
 ```
 
-This output is consumed by the existing RViz configuration.
+---
 
-## ROS 2 Topics
+# Runtime Parameters
 
-| Direction | Topic | Message | Purpose |
-|---|---|---|---|
-| Input | `/kitti/point_cloud` | `sensor_msgs/msg/PointCloud2` | Sequential LiDAR scans |
-| Output | `/pointcloud/odom` | `nav_msgs/msg/Odometry` | Estimated LiDAR odometry |
+The ROS node exposes configurable parameters.
 
-The provided RViz configuration also contains displays for several KITTI image topics and comparison/auxiliary odometry topics, but the core odometry implementation in this repository uses the LiDAR point-cloud input and `/pointcloud/odom` output.
+| Parameter                 |              Default | Description                           |
+| ------------------------- | -------------------: | ------------------------------------- |
+| `input_topic`             | `/kitti/point_cloud` | LiDAR input topic                     |
+| `output_topic`            |   `/pointcloud/odom` | Odometry output topic                 |
+| `voxel_size`              |                `1.0` | Voxel downsampling size               |
+| `correspondence_distance` |                `1.0` | ICP correspondence threshold          |
+| `normal_radius`           |                `1.0` | Normal estimation radius              |
+| `normal_max_nn`           |                 `30` | Maximum normal neighbors              |
+| `max_iteration`           |                 `50` | ICP iteration limit                   |
+| `relative_fitness`        |               `0.15` | Minimum accepted ICP fitness          |
+| `max_inlier_rmse`         |               `0.50` | Maximum accepted ICP RMSE             |
+| `max_translation`         |                `5.0` | Maximum accepted relative translation |
+| `max_rotation_deg`        |               `45.0` | Maximum accepted relative rotation    |
 
-## Coordinate / Transform Handling
+---
 
-The implementation maintains the accumulated pose as a 4×4 homogeneous transformation matrix:
+# Configuration
+
+Runtime configuration is stored in:
 
 ```text
-┌ R₃×₃  t₃×₁ ┐
-└ 0 0 0    1 ┘
+config/odometry.yaml
 ```
 
-where:
+Example:
 
-- `R` is the accumulated rotation.
-- `t` is the accumulated translation.
+```yaml
+/**:
+  ros__parameters:
+    input_topic: /kitti/point_cloud
+    output_topic: /pointcloud/odom
+    voxel_size: 1.0
+    correspondence_distance: 1.0
+    normal_radius: 1.0
+    normal_max_nn: 30
+    max_iteration: 50
+    relative_fitness: 0.15
+    max_inlier_rmse: 0.50
+    max_translation: 5.0
+    max_rotation_deg: 45.0
+```
 
-Rotation matrices are converted to XYZ Euler angles for logging and to quaternions for ROS 2 odometry messages.
+The main launch file loads this configuration automatically.
 
-The node logs:
+---
+
+# Technology Stack
+
+| Component            | Technology                      |
+| -------------------- | ------------------------------- |
+| Operating System     | Ubuntu 22.04                    |
+| ROS                  | ROS 2 Humble                    |
+| Language             | Python 3.10                     |
+| Middleware           | ROS 2 / DDS                     |
+| LiDAR Message        | `sensor_msgs/msg/PointCloud2`   |
+| Odometry Message     | `nav_msgs/msg/Odometry`         |
+| Point Cloud          | Open3D 0.18.0                   |
+| Numerical Computing  | NumPy 1.26.4                    |
+| Scientific Computing | SciPy 1.11.4                    |
+| Visualization        | RViz2                           |
+| Testing              | Pytest                          |
+| Coverage             | pytest-cov                      |
+| CI                   | GitHub Actions                  |
+| Dataset Style        | KITTI LiDAR / ROS 2 PointCloud2 |
+
+---
+
+# Repository Structure
 
 ```text
-LiDAR Odom: x: ..., y: ..., yaw: ...
+ROS-2-LiDAR-Odometry/
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
+├── config/
+│   ├── odometry.yaml
+│   └── reliability_override.yaml
+│
+├── launch/
+│   └── lidar_odometry.launch.py
+│
+├── resource/
+│   └── simple_lidar_odometry
+│
+├── rviz/
+│   └── lidar.rviz
+│
+├── simple_lidar_odometry/
+│   ├── __init__.py
+│   ├── conversions.py
+│   ├── icp_motion_estimator.py
+│   └── lidar_odometry_node.py
+│
+├── test/
+│   ├── test_icp_motion_estimator.py
+│   └── test_lidar_odometry.py
+│
+├── package.xml
+├── requirements.txt
+├── setup.cfg
+└── setup.py
 ```
 
-during processing.
+---
 
-## Installation
+# Installation
 
-### 1. Create a ROS 2 workspace
+## 1. Create a ROS 2 workspace
 
 ```bash
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
+```
+
+Clone the repository:
+
+```bash
 git clone https://github.com/PhysicalAIEngineer/ROS-2-LiDAR-Odometry.git
 ```
 
-### 2. Source ROS 2 Humble
+---
+
+## 2. Source ROS 2 Humble
 
 ```bash
 source /opt/ros/humble/setup.bash
 ```
 
-### 3. Install ROS 2 dependencies
+---
+
+## 3. Install system dependencies
 
 ```bash
 sudo apt update
@@ -253,6 +614,8 @@ sudo apt install -y \
   python3-numpy \
   python3-scipy \
   python3-yaml \
+  python3-pytest \
+  python3-pytest-cov \
   ros-humble-rclpy \
   ros-humble-sensor-msgs \
   ros-humble-nav-msgs \
@@ -260,7 +623,15 @@ sudo apt install -y \
   ros-humble-rviz2
 ```
 
-### 4. Install Python dependencies
+For headless environments using Open3D, install the required OpenGL runtime library:
+
+```bash
+sudo apt install -y libgl1
+```
+
+---
+
+# Python Dependencies
 
 From the repository root:
 
@@ -269,21 +640,63 @@ python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 ```
 
-### 5. Build the workspace
+Pinned dependencies include:
+
+```text
+numpy==1.26.4
+open3d==0.18.0
+scipy==1.11.4
+PyYAML==6.0.1
+matplotlib==3.8.2
+pandas==2.1.4
+pytest==7.4.4
+pytest-cov==4.1.0
+tqdm==4.66.1
+```
+
+---
+
+# Build
+
+Move to the workspace:
 
 ```bash
 cd ~/ros2_ws
+```
+
+Source ROS 2:
+
+```bash
 source /opt/ros/humble/setup.bash
+```
+
+Build:
+
+```bash
 colcon build --symlink-install
 ```
 
-### 6. Source the workspace
+Source the workspace:
 
 ```bash
 source ~/ros2_ws/install/setup.bash
 ```
 
-## Launch the Project
+Verify that the package is available:
+
+```bash
+ros2 pkg list | grep simple_lidar_odometry
+```
+
+Expected result:
+
+```text
+simple_lidar_odometry
+```
+
+---
+
+# Launch
 
 The main launch file is:
 
@@ -302,318 +715,780 @@ ros2 launch simple_lidar_odometry lidar_odometry.launch.py
 
 The launch file starts:
 
-1. The `lidar_odometry_node`.
-2. RViz2 with `rviz/lidar.rviz`.
+```text
+LiDAR Odometry Node
+        +
+     RViz2
+```
 
-## Running Without the Launch File
+and automatically loads:
 
-The installed node can also be started directly:
+```text
+config/odometry.yaml
+```
+
+---
+
+# Run Without RViz2
+
+Start only the odometry node:
 
 ```bash
 ros2 run simple_lidar_odometry lidar_odometry_node
 ```
 
-Then start RViz separately:
+You can then start RViz independently:
 
 ```bash
-rviz2 -d ~/ros2_ws/install/simple_lidar_odometry/share/simple_lidar_odometry/rviz/lidar.rviz
+rviz2 -d \
+~/ros2_ws/install/simple_lidar_odometry/share/simple_lidar_odometry/rviz/lidar.rviz
 ```
 
-## Playing LiDAR Data
+---
 
-The odometry node requires a PointCloud2 stream on:
+# ROS 2 Bag Playback
+
+The node expects:
 
 ```text
 /kitti/point_cloud
 ```
 
-When using a ROS 2 bag, inspect the bag first:
-
-```bash
-ros2 bag info <bag_directory>
-```
-
-Then play it:
-
-```bash
-ros2 bag play <bag_directory>
-```
-
-Before starting the odometry node, verify that the expected input topic exists:
+Check the available topics:
 
 ```bash
 ros2 topic list
 ```
 
-and inspect its message type:
+Inspect the topic:
+
+```bash
+ros2 topic info /kitti/point_cloud
+```
+
+Check its message type:
 
 ```bash
 ros2 topic type /kitti/point_cloud
 ```
 
-Expected type:
+Expected:
 
 ```text
 sensor_msgs/msg/PointCloud2
 ```
 
-> The repository does not include the large ROS 2 bag/dataset payload itself. Keep large datasets outside Git when possible and document their source separately.
-
-## RViz2 Visualization
-
-The supplied configuration is:
-
-```text
-rviz/lidar.rviz
-```
-
-It uses:
-
-```text
-Fixed Frame: odom
-```
-
-and contains an enabled Simple LiDAR Odometry display subscribed to:
-
-```text
-/pointcloud/odom
-```
-
-The point-cloud display listens to:
-
-```text
-kitti/point_cloud
-```
-
-This makes it possible to visualize the incoming LiDAR data and estimated odometry together.
-
-## QoS Configuration
-
-The repository provides:
-
-```text
-config/reliability_override.yaml
-```
-
-The current configuration contains overrides for:
-
-- `/tf_static`
-- `/scan`
-
-including reliability, durability, and history settings.
-
-This file is useful when integrating the project into a ROS 2 environment where publisher/subscriber QoS policies need to be aligned. It is configuration support rather than part of the ICP algorithm itself.
-
-## Testing
-
-Run the repository tests with:
+Inspect a ROS 2 bag before playback:
 
 ```bash
-cd ~/ros2_ws/src/ROS-2-LiDAR-Odometry
-
-pytest -v test/test_lidar_odometry.py
+ros2 bag info <bag_directory>
 ```
 
-The current tests cover:
-
-- Initial 4×4 identity pose.
-- Rotation matrix to Euler angles.
-- Rotation matrix to quaternion.
-- Rotation conversion round-trip.
-- Open3D point-cloud conversion and voxel downsampling.
-- Known-translation ICP registration.
-- Statistical outlier removal.
-
-For a full ROS 2 integration test, the test environment should also provide a sourced ROS 2 Humble installation and the built package.
-
-## Useful ROS 2 Commands
-
-List nodes:
+Play the bag:
 
 ```bash
-ros2 node list
+ros2 bag play <bag_directory>
 ```
 
-List topics:
+---
+
+# Topic Remapping
+
+If the dataset uses a different LiDAR topic:
 
 ```bash
-ros2 topic list
+ros2 run simple_lidar_odometry lidar_odometry_node \
+  --ros-args \
+  -r /kitti/point_cloud:=/your/lidar/topic
 ```
-
-Inspect the point-cloud topic:
-
-```bash
-ros2 topic info /kitti/point_cloud
-```
-
-Inspect odometry output:
-
-```bash
-ros2 topic echo /pointcloud/odom
-```
-
-Check topic rate:
-
-```bash
-ros2 topic hz /pointcloud/odom
-```
-
-Inspect the node:
-
-```bash
-ros2 node info /lidar_odometry_node
-```
-
-## Troubleshooting
-
-### No LiDAR data appears
-
-Check:
-
-```bash
-ros2 topic list
-ros2 topic info /kitti/point_cloud
-```
-
-The node expects a PointCloud2 topic named:
-
-```text
-/kitti/point_cloud
-```
-
-If your bag publishes another topic name, remap it when launching the node.
 
 Example:
 
 ```bash
 ros2 run simple_lidar_odometry lidar_odometry_node \
-  --ros-args -r /kitti/point_cloud:=/your/actual/topic
+  --ros-args \
+  -r /kitti/point_cloud:=/velodyne_points
 ```
 
-### RViz opens but the point cloud is empty
+---
 
-Verify the fixed frame is:
+# RViz2 Visualization
+
+The repository contains:
 
 ```text
-odom
+rviz/lidar.rviz
 ```
 
-and verify the point-cloud topic is publishing:
+The configuration uses:
+
+```text
+Fixed Frame: odom
+```
+
+The primary displays include:
+
+```text
+LiDAR PointCloud
+      +
+LiDAR Odometry
+```
+
+The odometry output:
+
+```text
+/pointcloud/odom
+```
+
+can be visualized in RViz.
+
+---
+
+# QoS Configuration
+
+The repository also contains:
+
+```text
+config/reliability_override.yaml
+```
+
+This provides ROS 2 QoS settings for integration environments where publisher and subscriber QoS policies need to be aligned.
+
+Typical QoS concepts include:
+
+```text
+Reliability
+Durability
+History
+Depth
+```
+
+QoS mismatches can result in a topic appearing available but not delivering data to the subscriber.
+
+---
+
+# Testing
+
+The project uses Pytest for automated testing.
+
+Run the complete test suite:
 
 ```bash
-ros2 topic hz /kitti/point_cloud
+pytest -v
 ```
 
-Also check the RViz Reliability Policy and the publisher QoS.
-
-### ICP fails or produces unstable motion
-
-The implementation is sensitive to:
-
-- Large motion between consecutive scans.
-- Very sparse scans.
-- Poor overlap.
-- Dynamic objects.
-- The voxel size.
-- ICP correspondence threshold.
-- Normal estimation quality.
-
-The current implementation is intentionally simple and does not include a scan-to-submap backend, motion prior, robust loss, loop closure, or pose-graph optimization.
-
-### `ros2 launch` cannot find the package
-
-Make sure the workspace has been built and sourced:
+Run the ICP-specific tests:
 
 ```bash
-cd ~/ros2_ws
-colcon build --symlink-install
-source install/setup.bash
+pytest -v test/test_icp_motion_estimator.py
 ```
 
-Then verify:
+Run the ROS-node tests:
+
+```bash
+pytest -v test/test_lidar_odometry.py
+```
+
+---
+
+# Test Coverage
+
+The tests cover the core functionality.
+
+## ICP estimator tests
+
+Coverage includes:
+
+* configuration validation
+* invalid point-cloud shape handling
+* NumPy → Open3D conversion
+* finite point filtering
+* point-cloud preprocessing
+* normal estimation
+* ICP registration
+* known translation recovery
+* transformation validation
+* invalid initial transformations
+
+---
+
+## ROS node tests
+
+Coverage includes:
+
+* initial identity pose
+* Euler conversion
+* quaternion conversion
+* rotation round-trip
+* point-cloud conversion
+* ICP wrapper compatibility
+* statistical outlier filtering
+
+---
+
+# Continuous Integration
+
+The repository includes:
+
+```text
+.github/workflows/ci.yml
+```
+
+GitHub Actions executes the CI pipeline on pushes to `main` and pull requests.
+
+The workflow performs:
+
+```text
+Checkout
+   ↓
+ROS 2 Humble Environment
+   ↓
+System Dependencies
+   ↓
+Python Dependencies
+   ↓
+ROS 2 Build
+   ↓
+Python Compilation
+   ↓
+Unit Tests
+   ↓
+Coverage
+```
+
+The CI environment uses:
+
+```text
+Ubuntu 22.04
+ROS 2 Humble
+Python 3.10
+```
+
+Open3D's headless runtime dependency is explicitly installed:
+
+```text
+libgl1
+```
+
+to avoid:
+
+```text
+libGL.so.1: cannot open shared object file
+```
+
+---
+
+# Coverage Policy
+
+Coverage is measured specifically against the core ICP estimator:
+
+```text
+simple_lidar_odometry.icp_motion_estimator
+```
+
+This keeps the coverage gate focused on the reusable registration component rather than artificially requiring unit tests to cover every ROS runtime path.
+
+The CI gate is configured to require:
+
+```text
+80% minimum coverage
+```
+
+for the ICP estimator.
+
+---
+
+# Useful ROS 2 Commands
+
+## List nodes
+
+```bash
+ros2 node list
+```
+
+## List topics
+
+```bash
+ros2 topic list
+```
+
+## Inspect the LiDAR topic
+
+```bash
+ros2 topic info /kitti/point_cloud
+```
+
+## Inspect odometry
+
+```bash
+ros2 topic echo /pointcloud/odom
+```
+
+## Measure odometry frequency
+
+```bash
+ros2 topic hz /pointcloud/odom
+```
+
+## Inspect node information
+
+```bash
+ros2 node info /lidar_odometry_node
+```
+
+## Check package installation
 
 ```bash
 ros2 pkg list | grep simple_lidar_odometry
 ```
 
-## Limitations
+---
 
-This project is an educational/research-oriented LiDAR odometry implementation rather than a complete production SLAM stack.
+# Troubleshooting
+
+## 1. `libGL.so.1` error
+
+If Open3D fails during import:
+
+```text
+OSError: libGL.so.1:
+cannot open shared object file
+```
+
+Install:
+
+```bash
+sudo apt install -y libgl1
+```
+
+For GitHub Actions, ensure the same dependency exists in the CI container.
+
+---
+
+## 2. No LiDAR data
+
+Check:
+
+```bash
+ros2 topic list
+```
+
+and:
+
+```bash
+ros2 topic info /kitti/point_cloud
+```
+
+Then:
+
+```bash
+ros2 topic hz /kitti/point_cloud
+```
+
+If the topic is different, use topic remapping.
+
+---
+
+## 3. RViz is empty
+
+Check:
+
+```text
+Fixed Frame = odom
+```
+
+and verify:
+
+```bash
+ros2 topic hz /kitti/point_cloud
+ros2 topic hz /pointcloud/odom
+```
+
+Also verify the RViz display topic and QoS reliability policy.
+
+---
+
+## 4. ICP is unstable
+
+ICP performance depends strongly on:
+
+* overlap between scans
+* initial motion estimate
+* point density
+* voxel size
+* correspondence threshold
+* normal estimation
+* dynamic objects
+* scene geometry
+
+A large vehicle motion between consecutive frames can move the scans outside the useful convergence basin.
+
+---
+
+## 5. ICP returns low fitness
+
+Possible causes include:
+
+```text
+Insufficient scan overlap
+Sparse cloud
+Incorrect topic
+Large motion
+Dynamic scene
+Incorrect coordinate convention
+```
+
+Consider:
+
+```text
+smaller voxel size
+larger correspondence threshold
+better initial transform
+motion prior
+outlier filtering
+```
+
+---
+
+## 6. ICP returns excessive RMSE
+
+Potential causes:
+
+```text
+Poor geometry
+Incorrect normals
+Dynamic objects
+Bad correspondence threshold
+Incorrect initial transformation
+```
+
+Inspect the registration metrics:
+
+```text
+fitness
+inlier_rmse
+translation magnitude
+rotation magnitude
+```
+
+---
+
+## 7. ROS package cannot be found
+
+Rebuild:
+
+```bash
+cd ~/ros2_ws
+colcon build --symlink-install
+```
+
+Then source:
+
+```bash
+source ~/ros2_ws/install/setup.bash
+```
+
+Verify:
+
+```bash
+ros2 pkg list | grep simple_lidar_odometry
+```
+
+---
+
+# Performance Considerations
+
+ICP complexity depends heavily on point count and nearest-neighbor searches.
+
+Voxel downsampling is therefore important for reducing computational cost.
+
+The primary performance controls are:
+
+```text
+voxel_size
+normal_radius
+normal_max_nn
+correspondence_distance
+max_iteration
+```
+
+For higher-frequency LiDAR:
+
+```text
+smaller clouds
++
+good initial transform
++
+appropriate correspondence threshold
+```
+
+can substantially improve runtime.
+
+For large-scale deployment, the next optimization targets would include:
+
+* C++ ROS 2 implementation
+* multi-threaded point-cloud processing
+* Open3D tensor backend
+* GPU acceleration where applicable
+* scan-to-submap registration
+* motion prediction
+* incremental map management
+* adaptive voxel filtering
+
+---
+
+# Coordinate Frames
+
+The current implementation publishes odometry with:
+
+```text
+frame_id:
+odom
+
+child_frame_id:
+base_link
+```
+
+The accumulated pose is represented internally using a 4×4 homogeneous transformation.
+
+The rotation matrix is converted to a quaternion for the ROS message.
+
+A complete TF tree for a larger autonomous-driving stack could eventually look like:
+
+```text
+map
+ │
+ ▼
+odom
+ │
+ ▼
+base_link
+ │
+ ├── lidar
+ │
+ ├── camera
+ │
+ └── imu
+```
+
+The current repository focuses on LiDAR odometry and does not implement the complete TF tree.
+
+---
+
+# Current Limitations
+
+This repository is a **LiDAR odometry system**, not a complete graph-SLAM or LiDAR-inertial odometry stack.
 
 Current limitations include:
 
-- No pose-graph optimization.
-- No loop-closure detection.
-- No global map optimization.
-- No IMU preintegration.
-- No wheel odometry fusion.
-- No scan-to-submap optimization.
-- No robust backend optimization.
-- No explicit dynamic-object filtering in the main callback.
-- No benchmark report or KITTI odometry leaderboard evaluation included in the repository.
+* no loop-closure detection
+* no pose-graph optimization
+* no global map optimization
+* no scan-to-submap backend
+* no IMU preintegration
+* no wheel-odometry fusion
+* no LiDAR–IMU tightly coupled optimization
+* no LiDAR motion deskewing
+* no continuous-time trajectory estimation
+* no dedicated dynamic-object masking
+* no robust M-estimator loss in the ICP objective
+* no explicit covariance estimation
+* no degeneracy-aware Hessian analysis
+* no automatic keyframe management
+* no KITTI benchmark report in the repository
+* no ATE/RPE evaluation pipeline
+* no production hardware benchmark suite
 
-These limitations are important when comparing the project with production LiDAR-inertial odometry or graph-SLAM systems.
+The current implementation should therefore be understood as a strong **LiDAR odometry / registration foundation** that can be extended into a complete SLAM system.
 
-## Development Notes
+---
 
-The central implementation is:
+# Future Extensions
 
-```text
-simple_lidar_odometry/lidar_odometry_node.py
-```
+Potential extensions include:
 
-The point-cloud parsing utilities are:
-
-```text
-simple_lidar_odometry/conversions.py
-```
-
-Package installation and ROS 2 entry-point configuration are defined in:
-
-```text
-setup.py
-setup.cfg
-package.xml
-```
-
-Launch and visualization resources are:
+## LiDAR-Inertial Odometry
 
 ```text
-launch/
-rviz/
-config/
+LiDAR
+  +
+IMU
+  ↓
+Preintegration
+  ↓
+Tightly Coupled Optimization
 ```
 
-Unit tests are maintained in:
+---
+
+## Scan-to-Submap Registration
+
+Instead of:
 
 ```text
-test/test_lidar_odometry.py
+previous scan → current scan
 ```
 
-## Output 
-<img width="381" height="332" alt="lidar-odom-ezgif com-optimize" src="https://github.com/user-attachments/assets/637b2a13-e6a0-4804-8f1a-534ceb54429a" />
+use:
 
+```text
+current scan → local submap
+```
 
-## Research / Portfolio Context
+which can improve robustness and reduce frame-to-frame drift.
 
-This repository demonstrates practical understanding of:
+---
 
-- ROS 2 node development.
-- LiDAR point-cloud processing.
-- 3D rigid registration.
-- ICP-based motion estimation.
-- Homogeneous transformation mathematics.
-- Odometry message publication.
-- RViz2-based robotics visualization.
-- Python robotics tooling with Open3D, NumPy, and SciPy.
+## Loop Closure
 
-## Resume Points 
-* Developed a **ROS 2 LiDAR odometry pipeline** processing KITTI `PointCloud2` streams, converting 3D sensor data into Open3D point clouds and performing real-time frame-to-frame motion estimation.
+Add place-recognition and loop-closure detection:
 
-* Implemented **voxel-grid point-cloud downsampling and point-to-plane ICP registration** to estimate relative 6-DoF motion between consecutive LiDAR scans while reducing computational overhead.
+```text
+Current Keyframe
+       ↓
+Place Recognition
+       ↓
+Loop Candidate
+       ↓
+Geometric Verification
+       ↓
+Pose Graph
+```
 
-* Designed **4×4 homogeneous transformation and pose accumulation** using SE(3) rigid-body transformations, with rotation conversion between rotation matrices, Euler angles, and quaternions for ROS-compatible state estimation.
+---
 
-* Integrated LiDAR motion estimation with **ROS 2 `nav_msgs/Odometry`, RViz2 visualization, launch files, topic remapping, and QoS configuration**, enabling end-to-end visualization and debugging of the perception pipeline.
+## Pose Graph Optimization
 
-* Built and validated reusable **3D perception/registration utilities and unit tests** covering point-cloud conversion, voxel filtering, ICP translation estimation, transformation mathematics, quaternion conversion, and statistical outlier removal.
+The accumulated trajectory could become a graph:
+
+```text
+K0 ── K1 ── K2 ── K3 ── K4
+      │             │
+      └──── Loop ───┘
+```
+
+followed by global optimization.
+
+---
+
+## KITTI Benchmarking
+
+A benchmarking layer could report:
+
+```text
+Absolute Trajectory Error
+Relative Pose Error
+Translation Error
+Rotation Error
+Trajectory Drift
+Processing Time
+FPS
+Memory Usage
+```
+
+This would allow quantitative evaluation against standard LiDAR odometry systems.
+
+---
+
+# Development Workflow
+
+Recommended development loop:
+
+```bash
+git checkout -b feature/my-change
+
+python -m compileall simple_lidar_odometry test
+
+pytest -q
+
+colcon build --symlink-install
+
+git diff
+
+git commit -m "feat: ..."
+```
+
+Then push and allow GitHub Actions to validate the change.
+
+---
+
+# Research and Portfolio Value
+
+This repository demonstrates hands-on experience with several important robotics concepts:
+
+### Perception
+
+```text
+3D LiDAR
+Point Clouds
+Voxel Filtering
+Surface Normals
+Rigid Registration
+```
+
+### Localization
+
+```text
+Frame-to-Frame Registration
+SE(3)
+Pose Estimation
+Odometry
+```
+
+### Robotics Software
+
+```text
+ROS 2
+DDS
+PointCloud2
+nav_msgs/Odometry
+RViz2
+Launch Files
+Parameters
+QoS
+```
+
+### Engineering
+
+```text
+Modular Architecture
+Unit Tests
+Configuration Management
+Error Handling
+CI
+Coverage
+```
+
+The separation of:
+
+```text
+ROS 2 Node
+       +
+ICP Estimator
+       +
+Tests
+       +
+CI
+```
+
+also makes the project easier to extend and maintain.
+
+---
+
+# Resume Description
+
+### ROS 2 LiDAR Odometry
+
+**Technologies:** Python, ROS 2 Humble, Open3D, NumPy, SciPy, ICP, KITTI, RViz2, Pytest, GitHub Actions
+
+* Developed a ROS 2 LiDAR odometry pipeline for sequential `PointCloud2` processing, converting LiDAR scans into Open3D point clouds and estimating frame-to-frame vehicle motion.
+
+* Implemented voxel-grid preprocessing, surface-normal estimation, and point-to-plane ICP to estimate relative rigid-body transformations between consecutive 3D LiDAR scans.
+
+* Built SE(3)-based pose accumulation with homogeneous 4×4 transformations and rotation conversions between matrices, Euler angles, and quaternions for ROS-compatible odometry publication.
+
+* Added production-oriented registration quality gates using ICP fitness, inlier RMSE, translation bounds, rotation bounds, and rigid-transform validation to reject unreliable motion estimates.
+
+* Integrated automated unit testing and GitHub Actions CI with ROS 2 Humble builds, headless Open3D runtime dependencies, and coverage checks for the core ICP estimator.
+
+---
